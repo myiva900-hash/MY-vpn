@@ -1,0 +1,6 @@
+{
+  "name": "MUTIGANDA YVAN VPN",
+  "description": "Professional high-speed Android VPN client with multi-protocol support, custom payload injection, VIP subscription management, and direct WhatsApp support by Yvan Mutiganda.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
