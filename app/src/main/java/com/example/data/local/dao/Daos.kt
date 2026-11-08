@@ -6,19 +6,22 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.data.local.entities.AuditLogEntity
 import com.example.data.local.entities.CustomConfigEntity
 import com.example.data.local.entities.LogEntity
+import com.example.data.local.entities.OvpnConfigEntity
 import com.example.data.local.entities.PaymentEntity
+import com.example.data.local.entities.SupportMessageEntity
 import com.example.data.local.entities.UserAccountEntity
 import com.example.data.local.entities.VpnServerEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ServerDao {
-    @Query("SELECT * FROM vpn_servers ORDER BY isVipOnly ASC, pingMs ASC")
+    @Query("SELECT * FROM vpn_servers ORDER BY priority ASC, pingMs ASC")
     fun getAllServers(): Flow<List<VpnServerEntity>>
 
-    @Query("SELECT * FROM vpn_servers WHERE isActive = 1 ORDER BY pingMs ASC")
+    @Query("SELECT * FROM vpn_servers WHERE isActive = 1 ORDER BY priority ASC, pingMs ASC")
     fun getActiveServers(): Flow<List<VpnServerEntity>>
 
     @Query("SELECT * FROM vpn_servers WHERE id = :id LIMIT 1")
@@ -36,8 +39,32 @@ interface ServerDao {
     @Query("UPDATE vpn_servers SET isActive = :isActive WHERE id = :id")
     suspend fun setServerStatus(id: String, isActive: Boolean)
 
+    @Query("UPDATE vpn_servers SET healthStatus = :status, pingMs = :pingMs, capacityPercent = :capacity, lastCheckedAt = :time WHERE id = :id")
+    suspend fun updateServerHealth(id: String, status: String, pingMs: Int, capacity: Int, time: Long = System.currentTimeMillis())
+
     @Query("DELETE FROM vpn_servers WHERE id = :id")
     suspend fun deleteServer(id: String)
+}
+
+@Dao
+interface OvpnConfigDao {
+    @Query("SELECT * FROM ovpn_configs ORDER BY createdAt DESC")
+    fun getAllConfigs(): Flow<List<OvpnConfigEntity>>
+
+    @Query("SELECT * FROM ovpn_configs WHERE id = :id LIMIT 1")
+    suspend fun getConfigById(id: Long): OvpnConfigEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertConfig(config: OvpnConfigEntity): Long
+
+    @Query("UPDATE ovpn_configs SET isSelected = CASE WHEN id = :id THEN 1 ELSE 0 END")
+    suspend fun selectActiveConfig(id: Long)
+
+    @Delete
+    suspend fun deleteConfig(config: OvpnConfigEntity)
+
+    @Query("DELETE FROM ovpn_configs WHERE id = :id")
+    suspend fun deleteConfigById(id: Long)
 }
 
 @Dao
@@ -98,4 +125,25 @@ interface LogDao {
 
     @Query("DELETE FROM connection_logs")
     suspend fun clearLogs()
+}
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 200")
+    fun getAllAuditLogs(): Flow<List<AuditLogEntity>>
+
+    @Insert
+    suspend fun insertAuditLog(log: AuditLogEntity)
+}
+
+@Dao
+interface SupportMessageDao {
+    @Query("SELECT * FROM support_messages ORDER BY timestamp DESC")
+    fun getAllMessages(): Flow<List<SupportMessageEntity>>
+
+    @Insert
+    suspend fun insertMessage(msg: SupportMessageEntity): Long
+
+    @Query("UPDATE support_messages SET adminReply = :reply, status = 'ANSWERED' WHERE id = :id")
+    suspend fun replyMessage(id: Long, reply: String)
 }

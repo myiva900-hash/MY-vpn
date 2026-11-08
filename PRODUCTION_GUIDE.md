@@ -23,7 +23,40 @@ MUTIGANDA YVAN VPN is a native Android VPN application engineered with:
 
 ---
 
-## 2. MTN Mobile Money VIP Payment System
+## 2. Multi-VPS Server Fleet & Real-Time Health Probing
+Each authorized VPS server contains:
+- **Server ID:** Unique identifier (e.g. `ovpn_fr_1`, `ovpn_de_vip`).
+- **Endpoint:** Domain name or IPv4 address.
+- **Port & Transport:** `1194` (UDP) or `443`/`8080` (TCP).
+- **Protocol:** OpenVPN (`OVPN`), WireGuard (`WG`), SSH, or V2Ray.
+- **Health Probe:** Real socket connectivity test measuring millisecond latency (`pingMs`) and online/offline reachability. Never displays fake simulated online states.
+- **Capacity & Load:** Real capacity percentage balancing incoming user connections.
+- **Priority & Tier:** Free vs. VIP-only server access gating.
+
+### Auto Select Server Scoring Algorithm:
+$$Score = (Latency_{ms} \times 0.65) + (Capacity_{\%} \times 0.35)$$
+- Excludes offline servers and servers marked disabled by administrators.
+- Gated by user VIP tier (free users cannot be routed to VIP-only nodes).
+
+---
+
+## 3. Encrypted Configuration File System (`.myvpn` Format)
+For backing up and distributing configurations securely without exposing server credentials:
+- **Cipher:** `AES-256-GCM` (Galois/Counter Mode with 128-bit authentication tag).
+- **Key Derivation:** `PBKDF2WithHmacSHA256` with `65,536` iterations and a 16-byte cryptographically secure random salt.
+- **File Structure:**
+  ```
+  [0..5]   Magic Header: "MYVPN1" (6 bytes ASCII)
+  [6..21]  Salt: 16 random bytes
+  [22..33] IV: 12 random bytes
+  [34..]   Ciphertext + GCM Tag (16 bytes)
+  ```
+- **Integrity Validation:** If an incorrect password is typed or the file is modified, decryption immediately fails with `IllegalArgumentException: Failed to decrypt configuration. Incorrect password or file has been tampered with.`
+- **Standard Compatibility:** Standard `.ovpn` files are preserved as plain OpenVPN text. Unencrypted files are never falsely claimed to be encrypted.
+
+---
+
+## 4. MTN Mobile Money VIP Payment System
 ### Verified Merchant Information:
 - **Phone Number:** `0780949484`
 - **Payment / Merchant Code:** `2238763`

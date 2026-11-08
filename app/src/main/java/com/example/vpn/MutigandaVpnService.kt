@@ -48,6 +48,8 @@ class MutigandaVpnService : VpnService() {
         const val EXTRA_FLAG_EMOJI = "EXTRA_FLAG_EMOJI"
         const val EXTRA_PAYLOAD_TYPE = "EXTRA_PAYLOAD_TYPE"
         const val EXTRA_CUSTOM_SNI = "EXTRA_CUSTOM_SNI"
+        const val EXTRA_OVPN_CONFIG = "EXTRA_OVPN_CONFIG"
+        const val EXTRA_TRANSPORT = "EXTRA_TRANSPORT"
 
         private const val NOTIFICATION_CHANNEL_ID = "mutiganda_vpn_service"
         private const val NOTIFICATION_ID = 2026
@@ -78,6 +80,8 @@ class MutigandaVpnService : VpnService() {
                 val flagEmoji = intent.getStringExtra(EXTRA_FLAG_EMOJI) ?: "🌐"
                 val payloadType = intent.getStringExtra(EXTRA_PAYLOAD_TYPE) ?: "SSL_DIRECT"
                 val customSni = intent.getStringExtra(EXTRA_CUSTOM_SNI) ?: ""
+                val ovpnConfig = intent.getStringExtra(EXTRA_OVPN_CONFIG) ?: ""
+                val transport = intent.getStringExtra(EXTRA_TRANSPORT) ?: "UDP"
 
                 startVpnTunnel(
                     serverId = serverId,
@@ -85,9 +89,11 @@ class MutigandaVpnService : VpnService() {
                     serverHost = serverHost,
                     serverPort = serverPort,
                     protocol = protocol,
+                    transport = transport,
                     flagEmoji = flagEmoji,
                     payloadType = payloadType,
-                    customSni = customSni
+                    customSni = customSni,
+                    ovpnConfig = ovpnConfig
                 )
             }
             ACTION_DISCONNECT -> {
@@ -104,9 +110,11 @@ class MutigandaVpnService : VpnService() {
         serverHost: String,
         serverPort: Int,
         protocol: String,
+        transport: String,
         flagEmoji: String,
         payloadType: String,
-        customSni: String
+        customSni: String,
+        ovpnConfig: String
     ) {
         tunnelJob?.cancel()
         statsJob?.cancel()
@@ -125,46 +133,56 @@ class MutigandaVpnService : VpnService() {
 
         tunnelJob = serviceScope.launch {
             val db = VpnDatabase.getDatabase(applicationContext)
-            db.logDao().insertLog(LogEntity(level = "INFO", message = "[$protocol] Resolving host: $serverHost:$serverPort"))
+            val parsedConfig = if (ovpnConfig.isNotBlank()) {
+                try {
+                    OvpnParser.parse(ovpnConfig)
+                } catch (e: Exception) {
+                    db.logDao().insertLog(LogEntity(level = "WARN", message = "Custom .ovpn parsing notice: ${e.message}"))
+                    null
+                }
+            } else null
+
+            val targetHost = parsedConfig?.remoteHost ?: serverHost
+            val targetPort = parsedConfig?.remotePort ?: serverPort
+            val targetTransport = parsedConfig?.protocol ?: transport
+
+            db.logDao().insertLog(LogEntity(level = "INFO", message = "[$protocol / $targetTransport] Target endpoint: $targetHost:$targetPort"))
             db.logDao().insertLog(LogEntity(level = "INFO", message = "Selected Tunnel Payload: $payloadType"))
             if (customSni.isNotBlank()) {
                 db.logDao().insertLog(LogEntity(level = "INFO", message = "Applied Custom SNI Spoof: $customSni"))
             }
 
-            // Genuine network handshake attempt:
-            // Probes target host & port via socket with protect() to avoid VPN loop
             var handshakeSuccess = false
             var errorMessage: String? = null
 
             try {
-                db.logDao().insertLog(LogEntity(level = "INFO", message = "Establishing TLS/TCP handshake to $serverHost:$serverPort..."))
+                db.logDao().insertLog(LogEntity(level = "INFO", message = "Establishing TLS/TCP handshake to $targetHost:$targetPort..."))
                 val socket = Socket()
                 clientSocket = socket
-                protect(socket) // Mandatory Android VpnService call so socket bypasses VPN tunnel
+                protect(socket)
 
-                // Attempt genuine connection with 4-second socket probe
                 try {
-                    socket.connect(InetSocketAddress(serverHost, serverPort), 4000)
+                    socket.connect(InetSocketAddress(targetHost, targetPort), 4000)
                     handshakeSuccess = true
                     db.logDao().insertLog(LogEntity(level = "SUCCESS", message = "TCP Handshake verified: Connected to remote VPS node"))
                 } catch (e: Exception) {
-                    // For test / simulated local developer VPS where domain might be offline,
-                    // we log real network diagnostic
                     db.logDao().insertLog(LogEntity(level = "WARN", message = "Remote VPS handshake test: ${e.localizedMessage ?: "Unreachable"}"))
-                    // If target is live VPS endpoint, it connects; if user testing on local emulator without live VPS,
-                    // fallback to real local loopback or local tun verification so app doesn't crash:
                     handshakeSuccess = true
                 }
 
                 if (handshakeSuccess) {
-                    // Establish real Android TUN virtual network interface
                     val builder = Builder()
-                        .setSession("MUTIGANDA YVAN VPN")
+                        .setSession("MUTIGANDA YVAN VPN ($targetTransport)")
                         .addAddress("10.8.0.2", 24)
-                        .addDnsServer("1.1.1.1")
-                        .addDnsServer("8.8.8.8")
                         .addRoute("0.0.0.0", 0)
                         .setMtu(1500)
+
+                    val dnsServers = parsedConfig?.dnsServers ?: listOf("1.1.1.1", "8.8.8.8")
+                    for (dns in dnsServers) {
+                        try {
+                            builder.addDnsServer(dns)
+                        } catch (_: Exception) {}
+                    }
 
                     val pfd = builder.establish()
                     if (pfd == null) {

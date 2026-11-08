@@ -69,6 +69,7 @@ import com.example.ui.components.CyberTopBar
 import com.example.ui.components.DrawerContent
 import com.example.ui.screens.AboutScreen
 import com.example.ui.screens.AdminScreen
+import com.example.ui.screens.ConfigManagerScreen
 import com.example.ui.screens.CustomSetupDialog
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LogsScreen
@@ -100,10 +101,13 @@ class MainActivity : ComponentActivity() {
         val db = VpnDatabase.getDatabase(applicationContext)
         val repository = VpnRepository(
             serverDao = db.serverDao(),
+            ovpnConfigDao = db.ovpnConfigDao(),
             paymentDao = db.paymentDao(),
             accountDao = db.accountDao(),
             customConfigDao = db.customConfigDao(),
-            logDao = db.logDao()
+            logDao = db.logDao(),
+            auditLogDao = db.auditLogDao(),
+            supportMessageDao = db.supportMessageDao()
         )
 
         setContent {
@@ -136,6 +140,8 @@ fun MainScreen(viewModel: VpnViewModel) {
     val payments by viewModel.payments.collectAsStateWithLifecycle()
     val userAccount by viewModel.userAccount.collectAsStateWithLifecycle()
     val connectionLogs by viewModel.connectionLogs.collectAsStateWithLifecycle()
+    val ovpnConfigs by viewModel.ovpnConfigs.collectAsStateWithLifecycle()
+    val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
     val isAdminUnlocked by viewModel.adminUnlocked.collectAsStateWithLifecycle()
     val systemAnnouncement by viewModel.systemAnnouncement.collectAsStateWithLifecycle()
 
@@ -202,6 +208,7 @@ fun MainScreen(viewModel: VpnViewModel) {
                     CyberTopBar(
                         title = when (currentScreen) {
                             ScreenDestination.HOME, ScreenDestination.LOGS -> "MUTIGANDA YVAN VPN"
+                            ScreenDestination.CONFIG_MANAGER -> "OVPN & CONFIGS"
                             ScreenDestination.VIP_SUBSCRIPTION -> "VIP SUBSCRIPTION"
                             ScreenDestination.PAYMENT_HISTORY -> "PAYMENT HISTORY"
                             ScreenDestination.ADMIN_PANEL -> "ADMIN PORTAL"
@@ -381,6 +388,21 @@ fun MainScreen(viewModel: VpnViewModel) {
                                 onUpgradeVipClick = { viewModel.navigateTo(ScreenDestination.VIP_SUBSCRIPTION) }
                             )
                         }
+                        ScreenDestination.CONFIG_MANAGER -> {
+                            ConfigManagerScreen(
+                                configs = ovpnConfigs,
+                                onSelectConfig = { viewModel.selectOvpnConfig(it) },
+                                onDeleteConfig = { viewModel.deleteOvpnConfig(it) },
+                                onImportTextConfig = { name, text, isEnc, pwd ->
+                                    viewModel.importConfigurationText(name, text, isEnc, pwd)
+                                },
+                                onConnectWithConfig = { config ->
+                                    viewModel.connectWithOvpnConfig(config, context) {
+                                        requestVpnConnection()
+                                    }
+                                }
+                            )
+                        }
                         ScreenDestination.VIP_SUBSCRIPTION -> {
                             VipSubscriptionScreen(
                                 userAccount = userAccount,
@@ -399,6 +421,7 @@ fun MainScreen(viewModel: VpnViewModel) {
                                 servers = servers,
                                 payments = payments,
                                 userAccount = userAccount,
+                                auditLogs = auditLogs,
                                 onVerifyPin = { viewModel.verifyAdminPin(it) },
                                 onLogout = { viewModel.logoutAdmin() },
                                 onApprovePayment = { id, dur -> viewModel.approvePayment(id, dur) },
@@ -408,6 +431,9 @@ fun MainScreen(viewModel: VpnViewModel) {
                                 onAddServer = { name, cc, country, flag, host, port, proto, isVip ->
                                     viewModel.addServer(name, cc, country, flag, host, port, proto, isVip)
                                 },
+                                onProbeServer = { viewModel.probeServerHealth(it) },
+                                onProbeAllServers = { viewModel.probeAllServers() },
+                                onUpdateServer = { viewModel.updateServer(it) },
                                 onBroadcast = { msg -> viewModel.broadcastAnnouncement(msg) }
                             )
                         }
@@ -435,6 +461,7 @@ fun MainScreen(viewModel: VpnViewModel) {
         ServerSelectionDialog(
             servers = servers,
             selectedServerId = selectedServer?.id,
+            isUserVip = (userAccount?.vipExpiresAt ?: 0L) > System.currentTimeMillis(),
             onServerSelected = { server ->
                 viewModel.selectServer(server)
                 showServerDialog = false

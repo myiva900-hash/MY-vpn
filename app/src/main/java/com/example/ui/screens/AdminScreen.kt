@@ -94,6 +94,7 @@ fun AdminScreen(
     servers: List<VpnServerEntity>,
     payments: List<PaymentEntity>,
     userAccount: UserAccountEntity?,
+    auditLogs: List<com.example.data.local.entities.AuditLogEntity> = emptyList(),
     onVerifyPin: (String) -> Boolean,
     onLogout: () -> Unit,
     onApprovePayment: (Long, Long) -> Unit,
@@ -101,6 +102,9 @@ fun AdminScreen(
     onToggleServer: (String, Boolean) -> Unit,
     onDeleteServer: (String) -> Unit,
     onAddServer: (String, String, String, String, String, Int, String, Boolean) -> Unit,
+    onProbeServer: (VpnServerEntity) -> Unit = {},
+    onProbeAllServers: () -> Unit = {},
+    onUpdateServer: (VpnServerEntity) -> Unit = {},
     onBroadcast: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -119,12 +123,16 @@ fun AdminScreen(
             servers = servers,
             payments = payments,
             userAccount = userAccount,
+            auditLogs = auditLogs,
             onLogout = onLogout,
             onApprovePayment = onApprovePayment,
             onRejectPayment = onRejectPayment,
             onToggleServer = onToggleServer,
             onDeleteServer = onDeleteServer,
             onAddServer = onAddServer,
+            onProbeServer = onProbeServer,
+            onProbeAllServers = onProbeAllServers,
+            onUpdateServer = onUpdateServer,
             onBroadcast = onBroadcast
         )
     }
@@ -225,12 +233,16 @@ private fun AdminDashboardContent(
     servers: List<VpnServerEntity>,
     payments: List<PaymentEntity>,
     userAccount: UserAccountEntity?,
+    auditLogs: List<com.example.data.local.entities.AuditLogEntity>,
     onLogout: () -> Unit,
     onApprovePayment: (Long, Long) -> Unit,
     onRejectPayment: (Long, String) -> Unit,
     onToggleServer: (String, Boolean) -> Unit,
     onDeleteServer: (String) -> Unit,
     onAddServer: (String, String, String, String, String, Int, String, Boolean) -> Unit,
+    onProbeServer: (VpnServerEntity) -> Unit,
+    onProbeAllServers: () -> Unit,
+    onUpdateServer: (VpnServerEntity) -> Unit,
     onBroadcast: (String) -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -281,31 +293,44 @@ private fun AdminDashboardContent(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Payments (${payments.count { it.status == PaymentStatus.PENDING.name }})") }
+                text = { Text("VPS Fleet (${servers.size})") }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Servers (${servers.size})") }
+                text = { Text("Payments (${payments.count { it.status == PaymentStatus.PENDING.name }})") }
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Broadcast") }
+                text = { Text("Audit Trail (${auditLogs.size})") }
             )
             Tab(
                 selected = selectedTab == 3,
                 onClick = { selectedTab = 3 },
+                text = { Text("Broadcast") }
+            )
+            Tab(
+                selected = selectedTab == 4,
+                onClick = { selectedTab = 4 },
                 text = { Text("Users & Stats") }
             )
         }
 
         Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             when (selectedTab) {
-                0 -> AdminPaymentsTab(payments, onApprovePayment, onRejectPayment)
-                1 -> AdminServersTab(servers, onToggleServer, onDeleteServer, onAddClicked = { showAddServerDialog = true })
-                2 -> AdminBroadcastTab(onBroadcast)
-                3 -> AdminUsersStatsTab(userAccount)
+                0 -> AdminServersTab(
+                    servers = servers,
+                    onToggle = onToggleServer,
+                    onDelete = onDeleteServer,
+                    onProbe = onProbeServer,
+                    onProbeAll = onProbeAllServers,
+                    onAddClicked = { showAddServerDialog = true }
+                )
+                1 -> AdminPaymentsTab(payments, onApprovePayment, onRejectPayment)
+                2 -> AdminAuditLogsTab(auditLogs)
+                3 -> AdminBroadcastTab(onBroadcast)
+                4 -> AdminUsersStatsTab(userAccount)
             }
         }
     }
@@ -384,46 +409,151 @@ private fun AdminServersTab(
     servers: List<VpnServerEntity>,
     onToggle: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
+    onProbe: (VpnServerEntity) -> Unit,
+    onProbeAll: () -> Unit,
     onAddClicked: () -> Unit
 ) {
     Column {
-        Button(
-            onClick = onAddClicked,
-            colors = ButtonDefaults.buttonColors(containerColor = NeonTurquoise, contentColor = CyberBlack),
-            modifier = Modifier.fillMaxWidth().testTag("admin_add_server_button")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(imageVector = Icons.Default.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("ADD NEW VPN SERVER", fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onAddClicked,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonTurquoise, contentColor = CyberBlack),
+                modifier = Modifier.weight(1f).testTag("admin_add_server_button")
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("ADD VPS", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            Button(
+                onClick = onProbeAll,
+                colors = ButtonDefaults.buttonColors(containerColor = CyberNavyDark, contentColor = NeonCyan),
+                modifier = Modifier.weight(1f).testTag("admin_probe_all_button")
+            ) {
+                Text("PROBE ALL", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(servers) { s ->
+                val isOnline = s.healthStatus != "OFFLINE"
+                val statusColor = if (isOnline) NeonGreen else CyberRed
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().border(1.dp, CyberNavyBorder, RoundedCornerShape(12.dp)),
+                    colors = CardDefaults.cardColors(containerColor = CyberNavyDark)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(s.flagEmoji, fontSize = 22.sp, modifier = Modifier.padding(end = 8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(s.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                    if (s.isVipOnly) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "VIP",
+                                            color = CyberPurple,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.background(CyberPurple.copy(alpha = 0.2f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                Text("${s.host}:${s.port} • ${s.protocol} (${s.transport})", color = NeonCyan, fontSize = 11.sp)
+                            }
+                            Switch(
+                                checked = s.isActive,
+                                onCheckedChange = { onToggle(s.id, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = CyberBlack,
+                                    checkedTrackColor = NeonTurquoise
+                                )
+                            )
+                            IconButton(onClick = { onDelete(s.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = CyberRed, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CyberNavyCard, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier.size(8.dp).clip(CircleShape).background(statusColor)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${s.healthStatus} (${s.pingMs}ms)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = statusColor
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Load: ${s.capacityPercent}%",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { onProbe(s) },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("Test VPS", fontSize = 10.sp, color = NeonTurquoise)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminAuditLogsTab(
+    logs: List<com.example.data.local.entities.AuditLogEntity>
+) {
+    if (logs.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No administrative audit records yet.", color = TextMuted)
+        }
+    } else {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(logs) { log ->
+                val timeStr = SimpleDateFormat("dd/MM HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = CyberNavyDark)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(s.flagEmoji, fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(s.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                            Text("${s.host}:${s.port} (${s.protocol})", color = TextMuted, fontSize = 11.sp)
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(log.action, fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 12.sp)
+                            Text(timeStr, color = TextMuted, fontSize = 10.sp)
                         }
-                        Switch(
-                            checked = s.isActive,
-                            onCheckedChange = { onToggle(s.id, it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = CyberBlack,
-                                checkedTrackColor = NeonTurquoise
-                            )
-                        )
-                        IconButton(onClick = { onDelete(s.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = CyberRed)
+                        Text("Target: ${log.target}", color = TextSecondary, fontSize = 11.sp)
+                        if (log.details.isNotBlank()) {
+                            Text(log.details, color = TextMuted, fontSize = 10.sp)
                         }
                     }
                 }

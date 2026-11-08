@@ -13,12 +13,31 @@ data class VpnServerEntity(
     val flagEmoji: String,
     val host: String,
     val port: Int,
-    val protocol: String, // "OVPN", "WIREGUARD", "SSH", "V2RAY", "HYSTERIA", "SLOWDNS"
-    val isVipOnly: Boolean,
-    val pingMs: Int,
-    val isActive: Boolean,
+    val protocol: String = "OVPN", // "OVPN", "WIREGUARD", "SSH", "V2RAY"
+    val transport: String = "UDP", // "UDP", "TCP"
+    val isVipOnly: Boolean = false,
+    val pingMs: Int = 45,
+    val isActive: Boolean = true,
+    val capacityPercent: Int = 30, // 0 - 100%
+    val healthStatus: String = "ONLINE", // "ONLINE", "OFFLINE", "DEGRADED", "CHECKING"
+    val priority: Int = 1, // 1 = highest priority
+    val lastCheckedAt: Long = System.currentTimeMillis(),
     val description: String = "Stable | Fast | Universal",
-    val configData: String = "" // Profile / Ovpn / Wireguard config string
+    val configData: String = "" // Standard .ovpn profile or protocol parameters
+)
+
+@Entity(tableName = "ovpn_configs")
+data class OvpnConfigEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val remoteHost: String,
+    val remotePort: Int,
+    val transport: String = "UDP",
+    val rawConfig: String,
+    val isEncrypted: Boolean = false,
+    val isSelected: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "payment_records")
@@ -75,4 +94,27 @@ data class LogEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val level: String = "INFO", // "INFO", "WARN", "ERROR", "SUCCESS"
     val message: String
+)
+
+@Entity(tableName = "audit_logs")
+data class AuditLogEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val adminName: String = "Yvan Mutiganda",
+    val action: String, // "ADD_SERVER", "REMOVE_SERVER", "APPROVE_PAYMENT", "HEALTH_PROBE"
+    val target: String,
+    val details: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "support_messages")
+data class SupportMessageEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val senderPhone: String,
+    val topic: String,
+    val message: String,
+    val status: String = "OPEN", // "OPEN", "ANSWERED", "CLOSED"
+    val timestamp: Long = System.currentTimeMillis(),
+    val adminReply: String? = null
 )

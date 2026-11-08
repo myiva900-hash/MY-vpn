@@ -33,6 +33,7 @@ enum class ScreenDestination {
     LOGS,
     SERVERS,
     CUSTOM_SETUP,
+    CONFIG_MANAGER,
     VIP_SUBSCRIPTION,
     PAYMENT_HISTORY,
     ADMIN_PANEL,
@@ -72,6 +73,24 @@ class VpnViewModel(
     )
 
     val customConfigs: StateFlow<List<CustomConfigEntity>> = repository.customConfigs.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val ovpnConfigs: StateFlow<List<com.example.data.local.entities.OvpnConfigEntity>> = repository.allOvpnConfigs.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val auditLogs: StateFlow<List<com.example.data.local.entities.AuditLogEntity>> = repository.allAuditLogs.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val supportMessages: StateFlow<List<com.example.data.local.entities.SupportMessageEntity>> = repository.allSupportMessages.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
@@ -385,4 +404,110 @@ class VpnViewModel(
             repository.addLog("INFO", "Connection logs cleared.")
         }
     }
+
+    // ==========================================
+    // MULTI-VPS HEALTH PROBE & AUTO SELECTION
+    // ==========================================
+
+    fun probeServerHealth(server: VpnServerEntity) {
+        viewModelScope.launch {
+            repository.probeServerHealth(server)
+        }
+    }
+
+    fun probeAllServers() {
+        viewModelScope.launch {
+            repository.probeAllActiveServers()
+        }
+    }
+
+    fun autoSelectOptimalServer(context: Context): VpnServerEntity? {
+        val serverList = servers.value
+        val isVip = (userAccount.value?.vipExpiresAt ?: 0L) > System.currentTimeMillis()
+        val best = com.example.vpn.AutoServerSelector.selectBestServer(serverList, isVip)
+        if (best != null) {
+            _selectedServer.value = best
+            viewModelScope.launch {
+                repository.addLog(
+                    "SUCCESS",
+                    "Auto-selected optimal node: ${best.name} (${best.pingMs}ms, Load: ${best.capacityPercent}%)"
+                )
+            }
+            Toast.makeText(context, "Auto-Selected: ${best.name} (${best.pingMs}ms)", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "No available server found. Please refresh list.", Toast.LENGTH_SHORT).show()
+        }
+        return best
+    }
+
+    fun updateServer(server: VpnServerEntity) {
+        viewModelScope.launch {
+            repository.updateServer(server)
+        }
+    }
+
+    // ==========================================
+    // OVPN & ENCRYPTED CONFIGURATION METHODS
+    // ==========================================
+
+    fun importConfigurationText(
+        name: String,
+        content: String,
+        isEncrypted: Boolean,
+        password: String = ""
+    ): Pair<Boolean, String> {
+        var result = Pair(false, "Unknown error")
+        viewModelScope.launch {
+            val bytes = if (isEncrypted) {
+                try {
+                    android.util.Base64.decode(content.trim(), android.util.Base64.NO_WRAP)
+                } catch (_: Exception) {
+                    content.toByteArray(Charsets.UTF_8)
+                }
+            } else {
+                content.toByteArray(Charsets.UTF_8)
+            }
+            val filename = if (name.isNotBlank()) "$name.ovpn" else "imported.ovpn"
+            result = repository.importConfigFile(filename, bytes, password)
+        }
+        return Pair(true, "Configuration submitted for processing")
+    }
+
+    fun selectOvpnConfig(id: Long) {
+        viewModelScope.launch {
+            repository.selectActiveOvpnConfig(id)
+        }
+    }
+
+    fun deleteOvpnConfig(id: Long) {
+        viewModelScope.launch {
+            repository.deleteOvpnConfig(id)
+        }
+    }
+
+    fun connectWithOvpnConfig(
+        config: com.example.data.local.entities.OvpnConfigEntity,
+        context: Context,
+        onPrepareVpn: () -> Unit
+    ) {
+        viewModelScope.launch {
+            repository.selectActiveOvpnConfig(config.id)
+            val intent = Intent(context, MutigandaVpnService::class.java).apply {
+                action = MutigandaVpnService.ACTION_CONNECT
+                putExtra(MutigandaVpnService.EXTRA_SERVER_ID, "ovpn_${config.id}")
+                putExtra(MutigandaVpnService.EXTRA_SERVER_NAME, config.name)
+                putExtra(MutigandaVpnService.EXTRA_SERVER_HOST, config.remoteHost)
+                putExtra(MutigandaVpnService.EXTRA_SERVER_PORT, config.remotePort)
+                putExtra(MutigandaVpnService.EXTRA_PROTOCOL, "OVPN")
+                putExtra(MutigandaVpnService.EXTRA_TRANSPORT, config.transport)
+                putExtra(MutigandaVpnService.EXTRA_FLAG_EMOJI, "🌐")
+                putExtra(MutigandaVpnService.EXTRA_PAYLOAD_TYPE, "OVPN_PROFILE")
+                putExtra(MutigandaVpnService.EXTRA_CUSTOM_SNI, _customSni.value)
+                putExtra(MutigandaVpnService.EXTRA_OVPN_CONFIG, config.rawConfig)
+            }
+            context.startService(intent)
+            _currentScreen.value = ScreenDestination.HOME
+        }
+    }
 }
+

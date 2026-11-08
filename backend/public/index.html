@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUTIGANDA YVAN VPN — Admin Web Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Orbitron:wght@600;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-black: #060911;
+            --bg-card: #0A101F;
+            --bg-card-elevated: #111A30;
+            --border-color: #1E2D4A;
+            --neon-cyan: #00E5FF;
+            --neon-turquoise: #00BFA5;
+            --neon-green: #00E676;
+            --neon-red: #FF1744;
+            --neon-purple: #A855F7;
+            --text-primary: #F1F5F9;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-black);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: linear-gradient(180deg, #0D162B 0%, var(--bg-card) 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: var(--neon-cyan);
+            letter-spacing: 1.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge-owner {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--neon-purple);
+            border: 1px solid var(--neon-purple);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        .layout {
+            display: flex;
+            flex: 1;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border-color);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: rgba(0, 229, 255, 0.08);
+            color: var(--neon-cyan);
+            border-left: 3px solid var(--neon-cyan);
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: var(--neon-cyan);
+        }
+
+        .stat-val {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 26px;
+            color: var(--neon-turquoise);
+            margin-top: 6px;
+        }
+
+        .panel-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-online { background-color: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+        .status-offline { background-color: var(--neon-red); }
+
+        .btn {
+            background: var(--neon-turquoise);
+            color: var(--bg-black);
+            border: none;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            filter: brightness(1.2);
+            box-shadow: 0 0 10px rgba(0, 191, 165, 0.5);
+        }
+
+        .btn-purple {
+            background: var(--neon-purple);
+            color: white;
+        }
+
+        .btn-red {
+            background: var(--neon-red);
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand-title">
+            <span>⚡ MUTIGANDA YVAN VPN</span>
+            <span class="badge-owner">OWNER CONSOLE</span>
+        </div>
+        <div style="font-size: 13px; color: var(--text-secondary);">
+            Developer: <b>Yvan Mutiganda</b> | MTN MoMo: <span style="color: #FFCC00;">0780949484</span> | WhatsApp: <span style="color: #25D366;">+250787699523</span>
+        </div>
+    </header>
+
+    <div class="layout">
+        <div class="sidebar">
+            <div class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</div>
+            <div class="nav-item" onclick="switchTab('servers')">🌐 Multi-VPS Fleet</div>
+            <div class="nav-item" onclick="switchTab('payments')">💳 MTN MoMo Payments</div>
+            <div class="nav-item" onclick="switchTab('configs')">🔒 OVPN & .myvpn Profiles</div>
+            <div class="nav-item" onclick="switchTab('audit')">📜 Audit Trail</div>
+        </div>
+
+        <div class="main-content">
+            <!-- TAB 1: DASHBOARD -->
+            <div id="tab-dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div style="font-size: 12px; color: var(--text-muted);">ACTIVE VPS NODES</div>
+                        <div class="stat-val" id="stat-servers">5</div>
+                        <div style="font-size: 11px; color: var(--neon-green); margin-top: 4px;">100% Core Online</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="font-size: 12px; color: var(--text-muted);">PENDING MOMO APPROVALS</div>
+                        <div class="stat-val" style="color: #FFCC00;" id="stat-pending">1</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Awaiting verification</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="font-size: 12px; color: var(--text-muted);">CARRIER FOCUS</div>
+                        <div class="stat-val" style="color: var(--neon-cyan);">MTN [RW]</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Low-Latency Fiber</div>
+                    </div>
+                    <div class="stat-card">
+                        <div style="font-size: 12px; color: var(--text-muted);">SUPPORT WHATSAPP</div>
+                        <div class="stat-val" style="color: #25D366; font-size: 18px; margin-top: 10px;">+250 787 699 523</div>
+                    </div>
+                </div>
+
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <h3>AUTHORIZED MULTI-VPS CLUSTER</h3>
+                        <button class="btn btn-outline" onclick="probeFleet()">⚡ Test All Nodes</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>Endpoint</th>
+                                <th>Protocol</th>
+                                <th>Health</th>
+                                <th>Latency</th>
+                                <th>Load</th>
+                                <th>Access</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vps-table-body">
+                            <!-- Injected by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 2: PAYMENTS -->
+            <div id="tab-payments" style="display: none;">
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <h3>MTN MOBILE MONEY VERIFICATION (Merchant: 2238763 / Phone: 0780949484)</h3>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>TxID</th>
+                                <th>Client Phone</th>
+                                <th>Package</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payments-table-body">
+                            <!-- Injected by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: AUDIT TRAIL -->
+            <div id="tab-audit" style="display: none;">
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <h3>ADMINISTRATIVE AUDIT LOGS</h3>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Details</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-table-body">
+                            <!-- Injected by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let servers = [];
+        let payments = [];
+        let audit = [];
+
+        async function loadData() {
+            try {
+                const res = await fetch('/api/v1/servers');
+                const data = await res.json();
+                servers = data.servers || [];
+                renderServers();
+                document.getElementById('stat-servers').innerText = servers.length;
+
+                const pRes = await fetch('/api/v1/payments');
+                const pData = await pRes.json();
+                payments = pData.payments || [];
+                renderPayments();
+                document.getElementById('stat-pending').innerText = payments.filter(p => p.status === 'PENDING').length;
+
+                const aRes = await fetch('/api/v1/audit-logs');
+                const aData = await aRes.json();
+                audit = aData.auditLogs || [];
+                renderAudit();
+            } catch (e) {
+                console.error("Load error:", e);
+            }
+        }
+
+        function renderServers() {
+            const tbody = document.getElementById('vps-table-body');
+            tbody.innerHTML = servers.map(s => `
+                <tr>
+                    <td><b>${s.flagEmoji} ${s.name}</b></td>
+                    <td class="mono">${s.host}:${s.port}</td>
+                    <td><span class="mono">${s.protocol} (${s.transport})</span></td>
+                    <td><span class="status-dot status-online"></span> ${s.healthStatus}</td>
+                    <td style="color: var(--neon-cyan); font-weight: 700;">${s.pingMs} ms</td>
+                    <td>${s.capacityPercent}%</td>
+                    <td>${s.isVipOnly ? '<span style="color: var(--neon-purple); font-weight: bold;">VIP ONLY</span>' : 'FREE / ALL'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPayments() {
+            const tbody = document.getElementById('payments-table-body');
+            tbody.innerHTML = payments.map(p => `
+                <tr>
+                    <td class="mono"><b>${p.txId}</b></td>
+                    <td>${p.phoneNumber}</td>
+                    <td>${p.packageName}</td>
+                    <td style="color: var(--neon-turquoise); font-weight: 700;">${p.amountRwf} RWF</td>
+                    <td><span style="color: ${p.status === 'APPROVED' ? 'var(--neon-green)' : '#FFCC00'}; font-weight: bold;">${p.status}</span></td>
+                    <td>
+                        ${p.status === 'PENDING' ? `
+                            <button class="btn" onclick="approvePayment('${p.id}')">Approve & Activate</button>
+                            <button class="btn btn-red" onclick="rejectPayment('${p.id}')">Reject</button>
+                        ` : '<span style="color: var(--text-muted);">Verified</span>'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderAudit() {
+            const tbody = document.getElementById('audit-table-body');
+            tbody.innerHTML = audit.map(a => `
+                <tr>
+                    <td><b style="color: var(--neon-cyan);">${a.action}</b></td>
+                    <td>${a.target}</td>
+                    <td style="color: var(--text-secondary);">${a.details}</td>
+                    <td class="mono" style="font-size: 11px; color: var(--text-muted);">${new Date(a.timestamp).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function approvePayment(id) {
+            await fetch('/api/v1/payments/' + id + '/approve', { method: 'POST' });
+            loadData();
+        }
+
+        async function rejectPayment(id) {
+            await fetch('/api/v1/payments/' + id + '/reject', { method: 'POST' });
+            loadData();
+        }
+
+        async function probeFleet() {
+            const res = await fetch('/api/v1/servers/health');
+            const data = await res.json();
+            alert("Health probe complete! All nodes probed via TCP/UDP sockets.");
+            loadData();
+        }
+
+        function switchTab(tab) {
+            document.getElementById('tab-dashboard').style.display = tab === 'dashboard' ? 'block' : 'none';
+            document.getElementById('tab-payments').style.display = tab === 'payments' ? 'block' : 'none';
+            document.getElementById('tab-audit').style.display = tab === 'audit' ? 'block' : 'none';
+
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

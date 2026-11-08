@@ -169,6 +169,14 @@ fun DrawerContent(
         )
 
         DrawerItem(
+            label = "OVPN & Config Manager",
+            icon = Icons.Default.Dns,
+            tint = NeonTurquoise,
+            badge = "AES-256",
+            onClick = { onNavigate(ScreenDestination.CONFIG_MANAGER); onCloseDrawer() }
+        )
+
+        DrawerItem(
             label = "VIP Subscription",
             icon = Icons.Default.Star,
             tint = CyberPurple,

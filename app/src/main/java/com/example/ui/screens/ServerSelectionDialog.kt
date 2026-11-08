@@ -59,6 +59,7 @@ import com.example.ui.theme.TextSecondary
 fun ServerSelectionDialog(
     servers: List<VpnServerEntity>,
     selectedServerId: String?,
+    isUserVip: Boolean = false,
     onServerSelected: (VpnServerEntity) -> Unit,
     onCustomServerClicked: () -> Unit,
     onDismiss: () -> Unit
@@ -93,7 +94,7 @@ fun ServerSelectionDialog(
                         color = NeonCyan
                     )
                     Text(
-                        text = "${servers.size} Available",
+                        text = "${servers.size} Authorized Nodes",
                         style = MaterialTheme.typography.labelMedium,
                         color = TextMuted
                     )
@@ -110,9 +111,9 @@ fun ServerSelectionDialog(
                         AutoSelectServerCard(
                             isSelected = selectedServerId == "auto",
                             onClick = {
-                                val lowestPing = servers.minByOrNull { it.pingMs }
-                                if (lowestPing != null) {
-                                    onServerSelected(lowestPing.copy(name = "Auto Select Server (${lowestPing.name})"))
+                                val best = com.example.vpn.AutoServerSelector.selectBestServer(servers, isUserVip)
+                                if (best != null) {
+                                    onServerSelected(best.copy(name = "Auto Select Server (${best.name})"))
                                 }
                                 onDismiss()
                             }
